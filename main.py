@@ -18,7 +18,9 @@ Estrutura esperada da planilha (aba "Lista Ordenada", cabeçalho na linha 1):
 import html as _html
 import json
 import re
+import threading
 import unicodedata
+from datetime import datetime
 from io import BytesIO
 
 import pandas as pd
@@ -45,6 +47,13 @@ COL_IDADE    = "Idade"
 COL_OBS      = "Observações"
 COL_PADRINHO = "Padrinho"
 COL_TEL      = "Telefone Padrinho"
+
+# Carimbos de tempo — gravados APENAS se essas colunas já existirem na aba.
+# Não são criadas automaticamente, para não alterar a estrutura da planilha
+# sem o usuário pedir. Para ativar, basta criar as colunas com estes nomes.
+COL_TS_APP   = "Salvo no App"
+COL_TS_SHEET = "Gravado na Planilha"
+TS_FORMAT    = "%d/%m/%Y %H:%M:%S"
 
 # Aba usada pelo app (as demais abas da planilha são ignoradas)
 SHEET_NAME = "Lista Ordenada"
@@ -349,6 +358,55 @@ def _get_drive_service():
     return build("drive", "v3", credentials=creds, cache_discovery=False)
 
 
+@st.cache_resource(show_spinner=False)
+def get_drive_lock():
+    """
+    Trava única do processo, mantida durante todo o ciclo baixar → alterar → enviar.
+
+    Cada gravação reenvia o arquivo INTEIRO. Sem a trava, dois ciclos em paralelo
+    fazem o envio mais lento reverter o mais rápido — e o padrinho de uma criança
+    simplesmente desaparece, sem erro algum. Serializar os ciclos é o que torna o
+    uso simultâneo por várias pessoas seguro.
+    """
+    return threading.RLock()
+
+
+def _download_workbook(service, file_id: str):
+    """Baixa o xlsx do Drive e abre com openpyxl."""
+    from googleapiclient.http import MediaIoBaseDownload
+    import openpyxl
+    req = service.files().get_media(fileId=file_id)
+    buf = BytesIO()
+    downloader = MediaIoBaseDownload(buf, req)
+    done = False
+    while not done:
+        _, done = downloader.next_chunk()
+    buf.seek(0)
+    return openpyxl.load_workbook(buf)
+
+
+def _upload_workbook(service, file_id: str, wb) -> None:
+    """Serializa o workbook e sobrescreve o arquivo no Drive."""
+    from googleapiclient.http import MediaIoBaseUpload
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    media = MediaIoBaseUpload(buf, mimetype=XLSX_MIME, resumable=False)
+    service.files().update(fileId=file_id, media_body=media).execute()
+
+
+def _head_revision(service, file_id: str) -> str | None:
+    """Identificador da versão atual do arquivo no Drive (None se indisponível)."""
+    try:
+        meta = service.files().get(
+            fileId=file_id, fields="headRevisionId,modifiedTime,md5Checksum"
+        ).execute()
+        return (meta.get("headRevisionId") or meta.get("md5Checksum")
+                or meta.get("modifiedTime"))
+    except Exception:
+        return None
+
+
 def _candidate_rows(ws, col: int) -> list[int]:
     """Linhas (>=2) com valor na coluna `col`. Lê só as células que existem,
     para não varrer ~1 milhão de linhas vazias quando a planilha tem
@@ -362,10 +420,19 @@ def _candidate_rows(ws, col: int) -> list[int]:
 
 
 def patch_padrinho(wb, row_hint: int, numero: str, crianca: str,
-                   padrinho: str, telefone: str) -> str | None:
+                   padrinho: str, telefone: str,
+                   esperado: tuple[str, str] | None = None,
+                   clicked_at: datetime | None = None) -> str | None:
     """Grava Padrinho/Telefone na linha da criança dentro do workbook aberto.
+
     A linha é localizada por Nº + nome da criança (não só pela posição),
-    para que linhas reordenadas não levem a gravar na criança errada."""
+    para que linhas reordenadas não levem a gravar na criança errada.
+
+    `esperado` é o par (padrinho, telefone) que o formulário exibia quando foi
+    aberto. Como a gravação substitui o valor por inteiro, salvar em cima de um
+    dado desatualizado apagaria silenciosamente o padrinho que outra pessoa
+    acabou de cadastrar — por isso a célula é conferida aqui dentro, já com o
+    arquivo recém-baixado, e a gravação é recusada se mudou nesse intervalo."""
     sheet = _find_sheet(wb.sheetnames)
     if sheet is None:
         return f"Aba '{SHEET_NAME}' não encontrada na planilha. Nenhum dado foi alterado."
@@ -403,46 +470,78 @@ def patch_padrinho(wb, row_hint: int, numero: str, crianca: str,
                     "Nenhum dado foi alterado.")
         target = found[0]
 
+    # ── Concorrência otimista: o que está no arquivo ainda é o que o
+    #    formulário mostrava quando foi aberto?
+    if esperado is not None:
+        atual = (clean(ws.cell(row=target, column=i_pad + 1).value),
+                 clean(ws.cell(row=target, column=i_tel + 1).value))
+        if atual != (clean(esperado[0]), clean(esperado[1])):
+            quem = atual[0] or "(sem padrinho)"
+            return (f"O padrinho de {crianca} foi alterado por outra pessoa "
+                    f"enquanto você preenchia (agora está: {quem}). "
+                    "Nada foi alterado — feche e reabra para ver a versão atual.")
+
     ws.cell(row=target, column=i_pad + 1, value=padrinho)
     ws.cell(row=target, column=i_tel + 1, value=telefone)
+
+    # ── Carimbos de tempo, só se as colunas já existirem na planilha
+    for nome_col, momento in ((COL_TS_APP, clicked_at or datetime.now()),
+                              (COL_TS_SHEET, datetime.now())):
+        i_ts = find_col(headers, nome_col)
+        if i_ts is not None:
+            ws.cell(row=target, column=i_ts + 1,
+                    value=momento.strftime(TS_FORMAT))
     return None
 
 
 def save_padrinho_to_drive(row_hint: int, numero: str, crianca: str,
-                           padrinho: str, telefone: str) -> str | None:
-    """Baixa a versão atual do Drive, grava e reenvia. None = sucesso."""
+                           padrinho: str, telefone: str,
+                           esperado: tuple[str, str] | None = None,
+                           tentativas: int = 3) -> str | None:
+    """Baixa a versão atual do Drive, grava e reenvia. None = sucesso.
+
+    Duas proteções envolvem o ciclo:
+
+    1. `get_drive_lock()` serializa as gravações DESTE processo — sem ela, dois
+       voluntários salvando ao mesmo tempo fariam um envio reverter o outro.
+
+    2. A versão do arquivo no Drive é conferida logo antes do envio. Isso cobre
+       o que a trava não alcança: o app de cadastro grava no MESMO arquivo, e
+       roda em outro processo. Se alguém gravou nesse intervalo, o ciclo é
+       refeito do zero com o arquivo novo, em vez de sobrescrever.
+    """
     if not _gdrive_write_enabled():
         return "Credenciais do Google Drive não configuradas."
-    try:
-        from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
-        import openpyxl
 
+    clicked_at = datetime.now()   # antes da trava e da rede
+    try:
         file_id = st.secrets["GDRIVE_FILE_ID"]
         service = _get_drive_service()
 
-        req = service.files().get_media(fileId=file_id)
-        dl_buf = BytesIO()
-        downloader = MediaIoBaseDownload(dl_buf, req)
-        done = False
-        while not done:
-            _, done = downloader.next_chunk()
-        dl_buf.seek(0)
+        for tentativa in range(tentativas):
+            with get_drive_lock():
+                rev_antes = _head_revision(service, file_id)
+                wb = _download_workbook(service, file_id)
+                try:
+                    err = patch_padrinho(wb, row_hint, numero, crianca,
+                                         padrinho, telefone, esperado, clicked_at)
+                    if err:
+                        return err
 
-        wb = openpyxl.load_workbook(dl_buf)
-        try:
-            err = patch_padrinho(wb, row_hint, numero, crianca, padrinho, telefone)
-            if err:
-                return err
-            up_buf = BytesIO()
-            wb.save(up_buf)
-        finally:
-            wb.close()
+                    # Alguém (outro app/processo) gravou enquanto trabalhávamos?
+                    if (rev_antes is not None
+                            and _head_revision(service, file_id) != rev_antes):
+                        continue      # refaz o ciclo com o arquivo atualizado
 
-        up_buf.seek(0)
-        media = MediaIoBaseUpload(up_buf, mimetype=XLSX_MIME, resumable=False)
-        service.files().update(fileId=file_id, media_body=media).execute()
-        load_data.clear()
-        return None
+                    _upload_workbook(service, file_id, wb)
+                finally:
+                    wb.close()
+
+            load_data.clear()
+            return None
+
+        return ("O arquivo está sendo alterado por outra pessoa no momento. "
+                "Nada foi gravado — tente novamente em alguns segundos.")
     except Exception as exc:
         return str(exc)
 
@@ -510,12 +609,18 @@ def _padrinho_form(kid: dict) -> None:
             st.rerun()   # nada mudou
 
         with st.spinner("Salvando no Google Drive…"):
-            err = save_padrinho_to_drive(kid["_row"], kid[COL_NUM], kid[COL_NOME],
-                                         padrinho, telefone)
+            # `esperado` é o que este formulário exibia ao abrir: a gravação é
+            # recusada se outra pessoa mexeu nesta criança nesse intervalo.
+            err = save_padrinho_to_drive(
+                kid["_row"], kid[COL_NUM], kid[COL_NOME], padrinho, telefone,
+                esperado=(kid[COL_PADRINHO], kid[COL_TEL]),
+            )
         if err:
             st.error(f"Erro ao salvar: {err}")
             st.stop()
 
+        # Só reflete na tela depois que o Drive confirmou — nunca antes, para
+        # não mostrar como salvo algo que falhou.
         st.session_state.pad_edits[(kid[COL_NUM], _norm(kid[COL_NOME]))] = (padrinho, telefone)
         st.session_state.pad_saved = f"Padrinho de {kid[COL_NOME]} salvo: {padrinho}."
         st.rerun()
