@@ -601,7 +601,7 @@ def _padrinho_form(kid: dict) -> None:
 
     padrinho = st.text_input("Padrinho *", value=kid[COL_PADRINHO], key=f"{prefix}_nome")
     telefone = st.text_input("Telefone *", value=kid[COL_TEL], key=f"{prefix}_tel",
-                             placeholder="(11) 91234-5678")
+                             placeholder="91234-5678")
     st.caption("\\* campos obrigatórios")
 
     st.write("")
@@ -620,8 +620,8 @@ def _padrinho_form(kid: dict) -> None:
             errors.append("Padrinho é obrigatório.")
         if not telefone:
             errors.append("Telefone é obrigatório.")
-        elif len(re.sub(r"\D", "", telefone)) < 10:
-            errors.append("Telefone deve ter DDD + número (pelo menos 10 dígitos).")
+        elif len(re.sub(r"\D", "", telefone)) < 9:
+            errors.append("Telefone deve ter pelo menos 9 dígitos.")
         if errors:
             for e in errors:
                 st.error(e)

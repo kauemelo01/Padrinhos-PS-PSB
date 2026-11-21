@@ -17,7 +17,7 @@ App web (Streamlit), pensado para celular, para cadastrar padrinhos das criança
     | 4 a 8 anos    | 👦       | 👧       |
     | 9 anos ou mais| 🙋‍♂️      | 🙋‍♀️      |
 
-- **Cadastrar / Editar Padrinho**: botão em cada criança abre um popup com os campos **Padrinho** e **Telefone** (ambos obrigatórios; telefone com DDD, mín. 10 dígitos). Se a criança já tem padrinho, ele é exibido no cartão e o botão vira "Editar Padrinho".
+- **Cadastrar / Editar Padrinho**: botão em cada criança abre um popup com os campos **Padrinho** e **Telefone** (ambos obrigatórios; telefone com mín. 9 dígitos, DDD opcional). Se a criança já tem padrinho, ele é exibido no cartão e o botão vira "Editar Padrinho".
 - **Estatísticas** no rodapé: crianças apadrinhadas, % concluído, total e quantas faltam — no geral e por faixa etária (0 a 3, 4 a 8, 9 ou mais).
 
 ## Estrutura da planilha
