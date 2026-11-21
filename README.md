@@ -1,135 +1,138 @@
-# 🎁 Apadrinhamento — Pastoral Social Jardim Colombo
+# 🎁 Sponsorships — Pastoral Social Jardim Colombo
 
-Aplicativo mobile para cadastrar **padrinhos** das crianças atendidas pela Pastoral
-Social, construído com **Streamlit**. Lê e grava a planilha `cadastro.xlsx`
-hospedada no **Google Drive**, que permanece a fonte da verdade.
+A mobile app for registering **sponsors** (*padrinhos*) for the children served by
+the Pastoral Social (a parish community charity), built with **Streamlit**. It reads
+and writes the `cadastro.xlsx` spreadsheet hosted on **Google Drive**, which remains
+the source of truth.
 
-> **Projeto derivado do [Cadastro-PS-PSB](https://github.com/kauemelo01/Cadastro-PS-PSB).**
-> O Apadrinhamento é um *spin-off* do app principal de cadastro da Pastoral Social:
-> usa a mesma planilha, a mesma conta de serviço do Drive e a mesma configuração
-> de *Secrets*, mas cuida de uma única tarefa — ligar cada criança a um padrinho.
-> Os dois apps podem ficar no ar ao mesmo tempo, gravando no mesmo arquivo
-> (veja [Gravação e integridade](#-gravação-e-integridade)).
+> **Spin-off of [Cadastro-PS-PSB](https://github.com/kauemelo01/Cadastro-PS-PSB).**
+> This app is a spin-off of the Pastoral Social's main registry app: it uses the same
+> spreadsheet, the same Drive service account and the same *Secrets* setup, but it
+> does a single job — linking each child to a sponsor. Both apps can run at the same
+> time, writing to the same file (see [Saving and data integrity](#-saving-and-data-integrity)).
 
----
-
-## 🔍 Busca
-
-| Funcionalidade | Descrição |
-|---|---|
-| **Busca por Nº do registro / carteirinha** | Mostra todas as crianças vinculadas àquela família |
-| **Correspondência exata do número** | Zeros à esquerda e casas decimais são ignorados: "015", "15" e "15.0" encontram o mesmo registro |
-| **Resumo da família** | Acima dos cartões: Nº, quantidade de crianças e quantas já têm padrinho |
+The app's interface is in Portuguese; button labels, sheet names and column headers
+are quoted below exactly as they appear in the app and in the spreadsheet.
 
 ---
 
-## 🧒 Cartão da criança
+## 🔍 Search
 
-| Elemento | Descrição |
+| Feature | Description |
 |---|---|
-| **Nome em destaque** | Com sexo e idade logo abaixo |
-| **Beneficiário** | Nome do responsável pela cesta, em menor destaque |
-| **Observações** | Em destaque amarelo, quando houver |
-| **Padrinho** | Nome e telefone em verde quando já cadastrado; "Ainda sem padrinho" quando não |
-| **Cor da borda** | Azul para meninos, rosa para meninas |
-| **Ícone** | Conforme sexo e faixa etária (tabela abaixo) |
+| **Search by record / membership-card number** | Shows every child linked to that family |
+| **Exact number match** | Leading zeros and decimals are ignored: "015", "15" and "15.0" find the same record |
+| **Family summary** | Above the cards: number, how many children and how many already have a sponsor |
 
-| Faixa | Menino | Menina |
+---
+
+## 🧒 Child card
+
+| Element | Description |
+|---|---|
+| **Name, prominent** | With sex and age just below |
+| **Beneficiary** | Name of the person who receives the food basket, in smaller type |
+| **Notes** | Highlighted in yellow, when present |
+| **Sponsor** | Name and phone in green when registered; "Ainda sem padrinho" (no sponsor yet) otherwise |
+| **Border colour** | Blue for boys, pink for girls |
+| **Icon** | By sex and age group (table below) |
+
+| Age group | Boy | Girl |
 |---|---|---|
-| 0 a 3 anos | 👶 🧢 | 👶 🎀 |
-| 4 a 8 anos | 👦 | 👧 |
-| 9 anos ou mais | 🙋‍♂️ | 🙋‍♀️ |
+| 0 to 3 years | 👶 🧢 | 👶 🎀 |
+| 4 to 8 years | 👦 | 👧 |
+| 9 years or older | 🙋‍♂️ | 🙋‍♀️ |
 
-Idades em meses ("3 meses") contam como 0 anos.
+Ages given in months ("3 meses") count as 0 years.
 
 ---
 
-## ✏️ Cadastrar / Editar Padrinho
+## ✏️ Register / edit a sponsor
 
-| Funcionalidade | Descrição |
+| Feature | Description |
 |---|---|
-| **Popup por criança** | Botão **➕ Cadastrar Padrinho** (ou **✏️ Editar Padrinho**, se já houver um) |
-| **Campos obrigatórios** | Padrinho e Telefone; o telefone precisa de DDD + número (mín. 10 dígitos) |
-| **Limpeza automática** | Espaços extras no nome são removidos antes de gravar |
-| **Nada mudou, nada grava** | Se os valores são iguais aos atuais, o popup fecha sem ir ao Drive |
-| **Confirmação** | Mensagem de sucesso no topo depois que o Drive confirma a gravação |
+| **Popup per child** | **➕ Cadastrar Padrinho** button (or **✏️ Editar Padrinho** when there already is one) |
+| **Required fields** | Sponsor and Phone; the phone needs an area code + number (at least 10 digits) |
+| **Automatic clean-up** | Extra spaces in the name are removed before saving |
+| **Nothing changed, nothing saved** | If the values equal the current ones, the popup closes without going to Drive |
+| **Confirmation** | A success message at the top once Drive confirms the save |
 
 ---
 
-## 📊 Estatísticas
+## 📊 Statistics
 
-No rodapé, sempre sobre a lista completa (não só a família buscada):
+In the footer, always over the full list (not just the family searched for):
 
-- **Apadrinhadas**, **% concluído**, **total** e **quantas faltam**;
-- uma barra de progresso por faixa etária (0 a 3, 4 a 8, 9 anos ou mais);
-- aviso de quantas crianças estão sem idade informada — elas entram só no total.
-
----
-
-## 💾 Gravação e integridade
-
-Toda alteração vai para o `.xlsx` no Google Drive através de uma conta de serviço.
-Como cada gravação reenvia o **arquivo inteiro**, e o app de cadastro grava no
-mesmo arquivo, o app adota estas salvaguardas:
-
-- **Escrita serializada** — uma trava única no processo cobre todo o ciclo
-  baixar → alterar → enviar. Sem ela, dois voluntários salvando ao mesmo tempo
-  fariam o envio mais lento apagar o mais rápido, sem erro algum.
-- **Checagem de versão no Drive** — a versão do arquivo é conferida logo antes do
-  envio. Se outro processo (por exemplo, o app de cadastro) gravou nesse intervalo,
-  o ciclo é refeito do zero com o arquivo novo, até 3 tentativas. Se o arquivo
-  continuar mudando, nada é gravado e o usuário é avisado para tentar de novo.
-- **Concorrência otimista por criança** — o popup lembra o padrinho e o telefone
-  que exibia ao abrir. Se outra pessoa alterou essa criança enquanto o formulário
-  estava aberto, a gravação é recusada e o app mostra quem está registrado agora.
-- **Endereçamento por conteúdo** — a linha é localizada por **Nº + nome da
-  criança**, e as colunas pelo nome do cabeçalho, sempre no arquivo recém-baixado.
-  Reordenar a planilha ou inserir colunas não faz o padrinho ir para a criança errada.
-- **Recusa em caso de ambiguidade** — se a criança não for encontrada, ou houver
-  duas com o mesmo nome no mesmo Nº, nada é alterado e o motivo é exibido.
-- **Gravação antes da tela** — o cartão só mostra o novo padrinho depois que o
-  Drive confirma, para nunca exibir como salvo algo que falhou. A alteração aparece
-  na hora, mesmo antes de o cache recarregar o arquivo.
-- **Duplo carimbo de tempo (opcional)** — se a aba tiver as colunas
-  `Salvo no App` e `Gravado na Planilha`, cada gravação registra quando o botão foi
-  clicado e quando chegou à planilha; a diferença revela espera de rede ou de trava.
-  As colunas não são criadas automaticamente.
+- **sponsored**, **% complete**, **total** and **how many are left**;
+- a progress bar per age group (0 to 3, 4 to 8, 9 or older);
+- a note on how many children have no age recorded — they count only in the total.
 
 ---
 
-## 🗂️ Estrutura da planilha
+## 💾 Saving and data integrity
 
-O app usa sempre a aba **`Lista Ordenada`** de `cadastro.xlsx` (as outras abas,
-inclusive as do app de cadastro, são ignoradas). O nome da aba é localizado sem
-diferenciar acentos, maiúsculas ou espaços extras. Cabeçalho na linha 1:
+Every change goes to the `.xlsx` on Google Drive through a service account. Because
+each save re-uploads the **whole file**, and the registry app writes to the same
+file, the app uses these safeguards:
 
-| Cabeçalho | Observação |
+- **Serialized writes**: a single lock in the process covers the whole
+  download → edit → upload cycle. Without it, two volunteers saving at the same time
+  would have the slower upload silently erase the faster one.
+- **Version check on Drive**: the file's version is checked just before uploading. If
+  another process (for example, the registry app) wrote in the meantime, the cycle
+  starts over with the new file, up to 3 attempts. If the file keeps changing, nothing
+  is written and the user is asked to try again.
+- **Optimistic concurrency per child**: the popup remembers the sponsor and phone it
+  showed when it opened. If someone else changed that child while the form was open,
+  the save is refused and the app shows who is registered now.
+- **Content-based addressing**: the row is found by **number + child's name**, and
+  the columns by header name, always in the freshly downloaded file. Reordering the
+  spreadsheet or inserting columns won't send the sponsor to the wrong child.
+- **Refusal when ambiguous**: if the child isn't found, or two children with the same
+  name share a number, nothing is changed and the reason is shown.
+- **Write before display**: the card shows the new sponsor only after Drive confirms,
+  so it never shows as saved something that failed. The change appears immediately,
+  even before the cache reloads the file.
+- **Double timestamp (optional)**: if the tab has the columns `Salvo no App` and
+  `Gravado na Planilha`, each save records when the button was clicked and when it
+  reached the spreadsheet; the gap reveals network or lock waits. These columns are
+  not created automatically.
+
+---
+
+## 🗂️ Spreadsheet layout
+
+The app always uses the **`Lista Ordenada`** tab of `cadastro.xlsx` (other tabs,
+including the registry app's, are ignored). The tab is found regardless of accents,
+capitalization or extra spaces. Header in row 1:
+
+| Header | Note |
 |---|---|
-| `Nº Família / Carteirinha` | obrigatório |
-| `Beneficiário (Cesta)` | |
-| `Nome da criança` | obrigatório |
+| `Nº Família / Carteirinha` | required — family / membership-card number |
+| `Beneficiário (Cesta)` | basket beneficiary |
+| `Nome da criança` | required — child's name |
 | `Sexo` | `Masculino` / `Feminino` |
-| `Idade` | ex.: `6 anos`, `3 meses` |
-| `Observações` | |
-| `Padrinho` | criada automaticamente no 1º salvamento |
-| `Telefone Padrinho` | criada automaticamente no 1º salvamento |
-| `Salvo no App` | opcional — carimbo de tempo do clique |
-| `Gravado na Planilha` | opcional — carimbo de tempo da gravação |
+| `Idade` | e.g. `6 anos`, `3 meses` |
+| `Observações` | notes |
+| `Padrinho` | sponsor — created automatically on the first save |
+| `Telefone Padrinho` | sponsor's phone — created automatically on the first save |
+| `Salvo no App` | optional — timestamp of the click |
+| `Gravado na Planilha` | optional — timestamp of the write |
 
-Notas:
-- A ordem das colunas não importa; cada uma é localizada pelo nome do cabeçalho
-  (ignorando acentos e maiúsculas).
-- Linhas sem número ou sem nome da criança são ignoradas.
-- Carimbos de tempo usam o formato `dd/mm/aaaa hh:mm:ss`.
+Notes:
+- Column order doesn't matter; each column is found by its header name (ignoring
+  accents and capitalization).
+- Rows without a number or a child's name are ignored.
+- Timestamps use the `dd/mm/yyyy hh:mm:ss` format.
 
 ---
 
-## ⚙️ Configuração
+## ⚙️ Setup
 
-A configuração é a mesma do [app de cadastro](https://github.com/kauemelo01/Cadastro-PS-PSB):
-se ele já está no ar, basta reaproveitar os mesmos *Secrets*.
+The setup is the same as the [registry app](https://github.com/kauemelo01/Cadastro-PS-PSB)'s:
+if that one is already running, just reuse the same *Secrets*.
 
-### 1. Dependências
+### 1. Dependencies
 
 `requirements.txt`:
 
@@ -144,37 +147,37 @@ google-auth
 
 ### 2. Google Drive
 
-1. Crie uma *service account* no Google Cloud com a **Google Drive API** ativada e gere uma chave JSON.
-2. Compartilhe o arquivo `cadastro.xlsx` no Drive com o e-mail da service account, com permissão de **Editor**.
-3. Gere um link de download direto do arquivo (formato `https://drive.google.com/uc?export=download&id=<ID_DO_ARQUIVO>`).
+1. Create a *service account* in Google Cloud with the **Google Drive API** enabled and generate a JSON key.
+2. Share `cadastro.xlsx` on Drive with the service account's e-mail, with **Editor** permission.
+3. Build a direct download link for the file (format `https://drive.google.com/uc?export=download&id=<FILE_ID>`).
 
 ### 3. Secrets
 
-No Streamlit Community Cloud (*App → Settings → Secrets*) ou em `.streamlit/secrets.toml` para rodar localmente:
+In Streamlit Community Cloud (*App → Settings → Secrets*) or in `.streamlit/secrets.toml` to run locally:
 
 ```toml
-GITHUB_RAW_URL = "https://drive.google.com/uc?export=download&id=<ID_DO_ARQUIVO>"
-GDRIVE_FILE_ID = "<ID_DO_ARQUIVO>"
+GITHUB_RAW_URL = "https://drive.google.com/uc?export=download&id=<FILE_ID>"
+GDRIVE_FILE_ID = "<FILE_ID>"
 GDRIVE_SA_CREDENTIALS = '''
-{ ...conteúdo do JSON da service account... }
+{ ...contents of the service account JSON... }
 '''
 ```
 
-| Secret | Uso |
+| Secret | Purpose |
 |---|---|
-| `GITHUB_RAW_URL` | link de leitura da planilha (apesar do nome, aceita o link do Drive) |
-| `GDRIVE_FILE_ID` | ID do arquivo no Drive, usado para gravar |
-| `GDRIVE_SA_CREDENTIALS` | credenciais da service account (JSON) |
+| `GITHUB_RAW_URL` | link used to read the spreadsheet (despite the name, it takes the Drive link) |
+| `GDRIVE_FILE_ID` | the file's Drive ID, used for writing |
+| `GDRIVE_SA_CREDENTIALS` | service account credentials (JSON) |
 
-Sem `GDRIVE_FILE_ID` e `GDRIVE_SA_CREDENTIALS`, o app funciona só para consulta e
-exibe um aviso de que o salvamento está desativado.
+Without `GDRIVE_FILE_ID` and `GDRIVE_SA_CREDENTIALS`, the app is read-only and shows a
+notice that saving is disabled.
 
-> ⚠️ Nunca faça commit do `secrets.toml` nem do JSON da service account. Adicione
-> `.streamlit/secrets.toml` ao `.gitignore`.
+> ⚠️ Never commit `secrets.toml` or the service account JSON. Add
+> `.streamlit/secrets.toml` to `.gitignore`.
 
 ---
 
-## 🚀 Rodando localmente
+## 🚀 Running locally
 
 ```bash
 pip install -r requirements.txt
@@ -183,22 +186,22 @@ streamlit run main.py
 
 ## ☁️ Deploy
 
-1. Suba `main.py` e `requirements.txt` para este repositório.
-2. Em [share.streamlit.io](https://share.streamlit.io), crie um app apontando para o repositório, branch `main` e arquivo `main.py`.
-3. Configure os Secrets conforme acima.
+1. Push `main.py` and `requirements.txt` to this repository.
+2. At [share.streamlit.io](https://share.streamlit.io), create an app pointing at the repository, branch `main` and file `main.py`.
+3. Configure the Secrets as above.
 
 ---
 
-## 🛠️ Observações técnicas
+## 🛠️ Technical notes
 
-- Os dados ficam em cache por 5 minutos; após cada gravação o cache é limpo.
-- O download trata a página de confirmação que o Google Drive exibe para arquivos grandes.
-- Ao procurar a linha da criança, o app lê só as células preenchidas, para não varrer
-  milhares de linhas vazias quando a planilha tem formatação até o fim da folha.
-- A trava de escrita vale dentro de um processo. Entre processos diferentes (dois
-  apps, ou várias instâncias), quem protege é a checagem de versão no Drive.
-- Layout mobile-first, com paleta própria para o modo escuro.
+- Data is cached for 5 minutes; the cache is cleared after each save.
+- The download handles the confirmation page Google Drive shows for large files.
+- When looking for the child's row, the app reads only the filled cells, so it doesn't
+  scan thousands of empty rows when the sheet has formatting down to the bottom.
+- The write lock applies within one process. Across different processes (two apps, or
+  several instances), the Drive version check is what protects the data.
+- Mobile-first layout, with its own dark-mode palette.
 
-## 📄 Licença
+## 📄 License
 
 [GNU General Public License v3](LICENSE).
