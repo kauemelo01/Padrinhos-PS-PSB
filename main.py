@@ -20,8 +20,10 @@ import json
 import re
 import threading
 import unicodedata
-from datetime import datetime
+from copy import copy
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import requests
@@ -48,12 +50,24 @@ COL_OBS      = "Observações"
 COL_PADRINHO = "Padrinho"
 COL_TEL      = "Telefone Padrinho"
 
-# Carimbos de tempo — gravados APENAS se essas colunas já existirem na aba.
-# Não são criadas automaticamente, para não alterar a estrutura da planilha
-# sem o usuário pedir. Para ativar, basta criar as colunas com estes nomes.
+# Carimbos de tempo — se as colunas não existirem na aba, são criadas na
+# primeira gravação, logo depois das últimas colunas do cabeçalho.
 COL_TS_APP   = "Salvo no App"
 COL_TS_SHEET = "Gravado na Planilha"
 TS_FORMAT    = "%d/%m/%Y %H:%M:%S"
+
+# O servidor do Streamlit Cloud roda em UTC; sem isso os carimbos sairiam
+# 3 horas adiantados. Se o banco de fusos não estiver disponível, usa o
+# deslocamento fixo de Brasília (sem horário de verão desde 2019).
+try:
+    TZ_LOCAL = ZoneInfo("America/Sao_Paulo")
+except Exception:
+    TZ_LOCAL = timezone(timedelta(hours=-3))
+
+
+def agora() -> datetime:
+    """Horário de Brasília, sem informação de fuso (para formatar)."""
+    return datetime.now(TZ_LOCAL).replace(tzinfo=None)
 
 # Aba usada pelo app (as demais abas da planilha são ignoradas)
 SHEET_NAME = "Lista Ordenada"
@@ -444,16 +458,26 @@ def patch_padrinho(wb, row_hint: int, numero: str, crianca: str,
     if i_num is None or i_nome is None:
         return "Cabeçalho da planilha não reconhecido (Nº Família / Nome da criança)."
 
-    # Cria as colunas de padrinho se ainda não existirem
-    i_pad, i_tel = find_col(headers, COL_PADRINHO), find_col(headers, COL_TEL)
-    if i_pad is None:
+    # Cria as colunas que faltarem (padrinho, telefone e os dois carimbos),
+    # no fim do cabeçalho e com o mesmo estilo da última célula dele.
+    modelo = ws.cell(row=1, column=last_col) if last_col else None
+
+    def garantir_coluna(nome: str) -> int:
+        nonlocal last_col
+        i = find_col(headers, nome)
+        if i is not None:
+            return i
         last_col += 1
-        ws.cell(row=1, column=last_col, value=COL_PADRINHO)
-        i_pad = last_col - 1
-    if i_tel is None:
-        last_col += 1
-        ws.cell(row=1, column=last_col, value=COL_TEL)
-        i_tel = last_col - 1
+        cel = ws.cell(row=1, column=last_col, value=nome)
+        if modelo is not None and modelo.has_style:
+            cel._style = copy(modelo._style)
+        headers.append(nome)
+        return last_col - 1
+
+    i_pad = garantir_coluna(COL_PADRINHO)
+    i_tel = garantir_coluna(COL_TEL)
+    i_ts_app = garantir_coluna(COL_TS_APP)
+    i_ts_sheet = garantir_coluna(COL_TS_SHEET)
 
     def matches(r: int) -> bool:
         return (norm_numero(ws.cell(row=r, column=i_num + 1).value) == numero
@@ -484,13 +508,11 @@ def patch_padrinho(wb, row_hint: int, numero: str, crianca: str,
     ws.cell(row=target, column=i_pad + 1, value=padrinho)
     ws.cell(row=target, column=i_tel + 1, value=telefone)
 
-    # ── Carimbos de tempo, só se as colunas já existirem na planilha
-    for nome_col, momento in ((COL_TS_APP, clicked_at or datetime.now()),
-                              (COL_TS_SHEET, datetime.now())):
-        i_ts = find_col(headers, nome_col)
-        if i_ts is not None:
-            ws.cell(row=target, column=i_ts + 1,
-                    value=momento.strftime(TS_FORMAT))
+    # ── Carimbos de tempo (horário de Brasília)
+    ws.cell(row=target, column=i_ts_app + 1,
+            value=(clicked_at or agora()).strftime(TS_FORMAT))
+    ws.cell(row=target, column=i_ts_sheet + 1,
+            value=agora().strftime(TS_FORMAT))
     return None
 
 
@@ -513,7 +535,7 @@ def save_padrinho_to_drive(row_hint: int, numero: str, crianca: str,
     if not _gdrive_write_enabled():
         return "Credenciais do Google Drive não configuradas."
 
-    clicked_at = datetime.now()   # antes da trava e da rede
+    clicked_at = agora()          # antes da trava e da rede
     try:
         file_id = st.secrets["GDRIVE_FILE_ID"]
         service = _get_drive_service()
@@ -584,9 +606,9 @@ def _padrinho_form(kid: dict) -> None:
 
     st.write("")
     c1, c2 = st.columns(2)
-    save_clicked = c1.button("💾 Salvar", width="stretch", type="primary",
+    save_clicked = c1.button("💾 Salvar", use_container_width=True, type="primary",
                              key=f"{prefix}_salvar")
-    cancel_clicked = c2.button("❌ Cancelar", width="stretch",
+    cancel_clicked = c2.button("❌ Cancelar", use_container_width=True,
                                key=f"{prefix}_cancelar")
     if cancel_clicked:
         st.rerun()
@@ -675,10 +697,10 @@ def render_kid(kid: dict) -> None:
 
     btn_key = f"pad_btn_{kid['_row']}"
     if kid[COL_PADRINHO]:
-        clicked = st.button("✏️ Editar Padrinho", key=btn_key, width="stretch")
+        clicked = st.button("✏️ Editar Padrinho", key=btn_key, use_container_width=True)
         dialog = editar_padrinho_dialog
     else:
-        clicked = st.button("➕ Cadastrar Padrinho", key=btn_key, width="stretch",
+        clicked = st.button("➕ Cadastrar Padrinho", key=btn_key, use_container_width=True,
                             type="primary")
         dialog = cadastrar_padrinho_dialog
     if clicked:
