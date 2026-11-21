@@ -599,8 +599,13 @@ def _padrinho_form(kid: dict) -> None:
                 f"<span style='font-size:.85rem;color:#757575'>Nº {esc(kid[COL_NUM])} · "
                 f"{esc(kid[COL_BENEF])}</span>", unsafe_allow_html=True)
 
-    padrinho = st.text_input("Padrinho *", value=kid[COL_PADRINHO], key=f"{prefix}_nome")
-    telefone = st.text_input("Telefone *", value=kid[COL_TEL], key=f"{prefix}_tel",
+    # Cadastro novo: sugere o último padrinho/telefone salvo com sucesso nesta sessão.
+    if kid[COL_PADRINHO]:
+        padrao_nome, padrao_tel = kid[COL_PADRINHO], kid[COL_TEL]
+    else:
+        padrao_nome, padrao_tel = st.session_state.get("pad_last_saved", ("", ""))
+    padrinho = st.text_input("Padrinho *", value=padrao_nome, key=f"{prefix}_nome")
+    telefone = st.text_input("Telefone *", value=padrao_tel, key=f"{prefix}_tel",
                              placeholder="91234-5678")
     st.caption("\\* campos obrigatórios")
 
@@ -644,6 +649,7 @@ def _padrinho_form(kid: dict) -> None:
         # Só reflete na tela depois que o Drive confirmou — nunca antes, para
         # não mostrar como salvo algo que falhou.
         st.session_state.pad_edits[(kid[COL_NUM], _norm(kid[COL_NOME]))] = (padrinho, telefone)
+        st.session_state.pad_last_saved = (padrinho, telefone)
         st.session_state.pad_saved = f"Padrinho de {kid[COL_NOME]} salvo: {padrinho}."
         st.rerun()
 
