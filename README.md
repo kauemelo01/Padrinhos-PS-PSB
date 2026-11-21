@@ -136,7 +136,7 @@ se ele já está no ar, basta reaproveitar os mesmos *Secrets*.
 ```
 streamlit>=1.50
 pandas
-openpyxl
+openpyxl>=3.1.5
 requests
 google-api-python-client
 google-auth

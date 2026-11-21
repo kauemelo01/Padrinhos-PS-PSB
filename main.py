@@ -584,9 +584,9 @@ def _padrinho_form(kid: dict) -> None:
 
     st.write("")
     c1, c2 = st.columns(2)
-    save_clicked = c1.button("💾 Salvar", use_container_width=True, type="primary",
+    save_clicked = c1.button("💾 Salvar", width="stretch", type="primary",
                              key=f"{prefix}_salvar")
-    cancel_clicked = c2.button("❌ Cancelar", use_container_width=True,
+    cancel_clicked = c2.button("❌ Cancelar", width="stretch",
                                key=f"{prefix}_cancelar")
     if cancel_clicked:
         st.rerun()
@@ -675,10 +675,10 @@ def render_kid(kid: dict) -> None:
 
     btn_key = f"pad_btn_{kid['_row']}"
     if kid[COL_PADRINHO]:
-        clicked = st.button("✏️ Editar Padrinho", key=btn_key, use_container_width=True)
+        clicked = st.button("✏️ Editar Padrinho", key=btn_key, width="stretch")
         dialog = editar_padrinho_dialog
     else:
-        clicked = st.button("➕ Cadastrar Padrinho", key=btn_key, use_container_width=True,
+        clicked = st.button("➕ Cadastrar Padrinho", key=btn_key, width="stretch",
                             type="primary")
         dialog = cadastrar_padrinho_dialog
     if clicked:
